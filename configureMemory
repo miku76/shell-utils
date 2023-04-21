@@ -1,0 +1,61 @@
+#!/bin/bash
+
+source ./extLib/bsfl.sh
+source ./extLib/optparse.bash
+
+#Defined Options
+optparse.define short=r long=reservedMem desc="OS reserved memory" variable=reservedMemoryGB default=3
+#Definfed Flags
+optparse.define short=Y long=yes desc="Accept all prompt request automaticlly" variable=prompt value=yes default=no
+
+source $( optparse.build )
+
+readonly FACTOR_KB=1024
+readonly FACTOR_MB=$(( FACTOR_KB**2))
+readonly FACTOR_GB=$(( FACTOR_KB**3))
+readonly RESERVED_MEM_KB=$(( reservedMemoryGB*FACTOR_MB )) 
+
+
+function getTotalMemoryInKb() {
+    local  __resultvar=$1
+    local  __result=$( grep "MemTotal" "/proc/meminfo" | grep -o -E "[[:digit:]]*")
+    if [[ "$__resultvar" ]]; then
+        eval $__resultvar="'$__result'"
+    else
+        echo "$__result"
+    fi
+}
+
+function getPageSize() {
+    local  __resultvar=$1
+    local  __result=$( getconf PAGESIZE)
+    if [[ "$__resultvar" ]]; then
+        eval $__resultvar="'$__result'"
+    else
+        echo "$__result"
+    fi
+}
+
+calculateUseableMemoryInKb() {
+    local  __resultvar=$1
+    getTotalMemoryInKb totalMemKB
+    local avMemKB=$(( totalMemKB-RESERVED_MEM_KB))
+    # Da der SAP ASE bei seinen SharedMemory immer of ein Vielfachea von 256MB optimiert und dabei auch noch aufrundet,
+    # sollte der berechnete Wert auf ein Vielfaches davon sein 
+    local avMemMB=$(( avMemKB/FACTOR_KB))
+    local avMem256=$(( (avMemMB/256)*256 ))
+    local  __result=$(( avMem256*FACTOR_KB ))
+    if [[ "$__resultvar" ]]; then
+        eval $__resultvar="'$__result'"
+    else
+        echo "$__result"
+    fi
+
+}
+
+
+
+getPageSize pageSize
+calculateUseableMemoryInKb useableMeminKB
+hugePages=$(( (useableMeminKB*FACTOR_KB)/pageSize ))
+msg_info "${hugePages}"
